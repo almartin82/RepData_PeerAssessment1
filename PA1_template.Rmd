@@ -5,18 +5,78 @@ output:
     keep_md: true
 ---
 
-
 ## Loading and preprocessing the data
+```{r}
+activity <- read.csv(file = 'activity.csv', stringsAsFactors = FALSE)
 
-
+require(magrittr)
+require(dplyr)
+```
 
 ## What is mean total number of steps taken per day?
 
+The prompt says that we can `ignore missing values`.  I am taking that to mean that we can `na.rm` when summing by day.
 
+### steps per day
+```{r}
+
+per_day <- activity %>%
+  dplyr::group_by(date) %>%
+  dplyr::summarize(
+    total_steps = sum(steps, na.rm = TRUE)
+  ) 
+
+per_day
+
+```
+
+### histogram
+```{r}
+per_day$total_steps %>% 
+  hist(
+    breaks = seq(0, 25000, 2500), 
+    main = 'Steps per Day'
+  )
+```
+
+### mean
+```{r}
+per_day$total_steps %>% mean()
+```
+
+### median
+```{r}
+per_day$total_steps %>% median()
+```
 
 ## What is the average daily activity pattern?
 
+```{r}
 
+per_interval <- activity %>%
+  dplyr::group_by(interval) %>%
+  dplyr::summarize(
+    total_steps = mean(steps, na.rm = TRUE)
+  )
+
+per_interval
+```
+
+```{r}
+plot(
+  per_interval$interval, per_interval$total_steps, type='l',
+  main = 'Average Steps per 5 min Daily Interval', 
+  xlab = 'Interval', ylab = 'Average Steps', 
+  col = 'hotpink', lwd = 2,
+)
+
+```
+
+### largest average interval
+The interval with the largest (maximum) number of steps is interval 835, with 206.2 steps.
+```{r}
+per_interval %>% arrange(-total_steps)
+```
 
 ## Imputing missing values
 

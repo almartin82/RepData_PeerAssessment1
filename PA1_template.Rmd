@@ -23,7 +23,7 @@ The prompt says that we can `ignore missing values`.  I am taking that to mean t
 per_day <- activity %>%
   dplyr::group_by(date) %>%
   dplyr::summarize(
-    total_steps = sum(steps, na.rm = TRUE)
+    avg_steps = sum(steps, na.rm = TRUE)
   ) 
 
 per_day
@@ -32,7 +32,7 @@ per_day
 
 ### histogram
 ```{r}
-per_day$total_steps %>% 
+per_day$avg_steps %>% 
   hist(
     breaks = seq(0, 25000, 2500), 
     main = 'Steps per Day'
@@ -41,12 +41,12 @@ per_day$total_steps %>%
 
 ### mean
 ```{r}
-per_day$total_steps %>% mean()
+per_day$avg_steps %>% mean()
 ```
 
 ### median
 ```{r}
-per_day$total_steps %>% median()
+per_day$avg_steps %>% median()
 ```
 
 ## What is the average daily activity pattern?
@@ -56,7 +56,7 @@ per_day$total_steps %>% median()
 per_interval <- activity %>%
   dplyr::group_by(interval) %>%
   dplyr::summarize(
-    total_steps = mean(steps, na.rm = TRUE)
+    avg_steps = mean(steps, na.rm = TRUE)
   )
 
 per_interval
@@ -64,7 +64,7 @@ per_interval
 
 ```{r}
 plot(
-  per_interval$interval, per_interval$total_steps, type='l',
+  per_interval$interval, per_interval$avg_steps, type='l',
   main = 'Average Steps per 5 min Daily Interval', 
   xlab = 'Interval', ylab = 'Average Steps', 
   col = 'hotpink', lwd = 2,
@@ -73,13 +73,107 @@ plot(
 ```
 
 ### largest average interval
-The interval with the largest (maximum) number of steps is interval 835, with 206.2 steps.
+The interval with the largest (maximum) number of steps is interval **835**, with 206.2 steps.
 ```{r}
-per_interval %>% arrange(-total_steps)
+per_interval %>% arrange(-avg_steps)
 ```
 
 ## Imputing missing values
 
+### total number of missing values
+There are 2304 missing (NA) rows.
 
+```{r}
+activity$steps %>% is.na() %>% sum()
+```
+
+### devise and create an imputation strategy
+
+```{r}
+
+ma <- function(x, n = 5){
+  stats::filter(x, rep(1/n, n), sides = 1)
+}
+
+per_day$rolling_avg <- ma(per_day$avg_steps, 3)
+per_day$rolling_avg <- ifelse(per_day$rolling_avg %>% is.na(), 0, per_day$rolling_avg)
+per_day <- per_day %>%
+  ungroup() %>%
+  rowwise() %>%
+  mutate(
+    avg_steps = avg_steps %>% as.numeric(),
+    imputed_steps = ifelse(
+      avg_steps == 0, rolling_avg, avg_steps
+    )
+  )
+
+per_day
+
+```
+
+### histogram
+```{r}
+per_day$imputed_steps %>% 
+  hist(
+    breaks = seq(0, 25000, 2500), 
+    main = 'Steps per Day'
+  )
+```
+
+### mean
+```{r}
+per_day$imputed_steps %>% mean()
+```
+
+### median
+```{r}
+per_day$imputed_steps %>% median()
+```
+
+### discussion
+My strategy for dealing with missing data is not very agressive - my general theory is that days with all NAs/missing data are almost certainly a mistake in the data (having owned a fitbit, those are probably days you forgot to wear it!).
+
+I computed a 3 day trailing average, and on those days with no steps, I replace the missing days with the trailing average.  This mainly impacts the lower tail of the distribution - rather than having some days that are zero, those days now look more like their neighbors, in terms of step count.
+
+This brings the mean up fairly significantly, from ~9,350 to ~10,050. The median, however, is not changed - my imputed data set still has a median step count of 10,395.  I think that's because all of the days that I imputed were already below the median, and while they moved up, no days moved up _past_ the median (and no days were added) meaning that the median value remained unchanged.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+### create new variable
+```{r}
+
+by_weekdays <- activity %>%
+  mutate(
+    is_weekday = weekdays(date %>% as.Date()),
+    is_weekday = ! is_weekday %in% c('Saturday', 'Sunday'),
+    is_weekday = ifelse(is_weekday, 'Weekdays', 'Weekends')
+  ) %>%
+  group_by(is_weekday, interval) %>%
+  dplyr::summarize(
+    avg_steps = mean(steps, na.rm = TRUE),
+    n = n()
+  )
+
+by_weekdays
+```
+
+### make a panel plot
+```{r}
+require(ggplot2)
+
+ggplot(
+  data = by_weekdays,
+  aes(
+    x = interval,
+    y = avg_steps,
+    color = is_weekday
+  )
+) +
+geom_line() +
+theme_bw() +
+facet_grid(is_weekday ~ .)
+
+
+```
+
+Activity starts earlier in the day on weekdays, and is more concentrated in the earlier intervals.  Weekend activity is much more frequent between intervals 1000 and 1500.
